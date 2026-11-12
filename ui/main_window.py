@@ -344,20 +344,11 @@ class BlueGuardWindow(QMainWindow):
             "Explicación en Lenguaje Claro",
             "Acción",
         ])
-        self.table_net.verticalHeader().setVisible(False)
-        self.table_net.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table_net.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table_net.setAlternatingRowColors(True)
-
-        hdr = self.table_net.horizontalHeader()
-        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
-        hdr.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
-        self.table_net.setColumnWidth(6, 110)
+        self._configure_table(
+            self.table_net,
+            default_widths=[180, 250, 170, 160, 140, 460, 110],
+            fixed_last_col=110,
+        )
 
         layout.addWidget(self.table_net, 1)
 
@@ -430,17 +421,11 @@ class BlueGuardWindow(QMainWindow):
             "Resumen del Evento",
             "Traducción y Significado para tu Equipo",
         ])
-        self.table_logs.verticalHeader().setVisible(False)
-        self.table_logs.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table_logs.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table_logs.setAlternatingRowColors(True)
-
-        lhdr = self.table_logs.horizontalHeader()
-        lhdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        lhdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        lhdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        lhdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        lhdr.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        self._configure_table(
+            self.table_logs,
+            default_widths=[145, 190, 110, 240, 520],
+            fixed_last_col=None,
+        )
         layout.addWidget(self.table_logs, 3)
 
         # Sección inferior: Reglas creadas por BlueGuard con botón Revertir
@@ -455,18 +440,62 @@ class BlueGuardWindow(QMainWindow):
             "Descripción",
             "Restaurar",
         ])
-        self.table_rules.verticalHeader().setVisible(False)
-        self.table_rules.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_rules.setMaximumHeight(150)
-
-        rhdr = self.table_rules.horizontalHeader()
-        rhdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        rhdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        rhdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        rhdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        self.table_rules.setColumnWidth(3, 130)
+        self._configure_table(
+            self.table_rules,
+            default_widths=[220, 150, 440, 130],
+            fixed_last_col=130,
+        )
 
         layout.addWidget(self.table_rules, 1)
+
+    def _configure_table(
+        self,
+        table: QTableWidget,
+        default_widths: list[int],
+        fixed_last_col: int | None = None,
+    ):
+        """Configura tablas con scroll horizontal fluido y columnas redimensionables."""
+        table.verticalHeader().setVisible(False)
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setAlternatingRowColors(True)
+        table.setWordWrap(False)
+        table.setTextElideMode(Qt.TextElideMode.ElideNone)
+        table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        hdr = table.horizontalHeader()
+        hdr.setStretchLastSection(False)
+        hdr.setMinimumSectionSize(70)
+        last_idx = len(default_widths) - 1
+        for idx, width in enumerate(default_widths):
+            if fixed_last_col is not None and idx == last_idx:
+                hdr.setSectionResizeMode(idx, QHeaderView.ResizeMode.Fixed)
+                table.setColumnWidth(idx, fixed_last_col)
+            else:
+                hdr.setSectionResizeMode(idx, QHeaderView.ResizeMode.Interactive)
+                table.setColumnWidth(idx, width)
+
+    def _autosize_table_once(
+        self,
+        table: QTableWidget,
+        flag_attr: str,
+        fixed_last_col: int | None = None,
+    ):
+        """Ajusta columnas al contenido la primera vez que llegan filas, preservando ajustes manuales luego."""
+        if getattr(self, flag_attr, False) or table.rowCount() == 0:
+            return
+        setattr(self, flag_attr, True)
+        table.resizeColumnsToContents()
+        col_count = table.columnCount()
+        last_idx = col_count - 1
+        for idx in range(col_count):
+            if fixed_last_col is not None and idx == last_idx:
+                table.setColumnWidth(idx, fixed_last_col)
+            else:
+                table.setColumnWidth(idx, table.columnWidth(idx) + 18)
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Lógica de Actualización y Escaneo en Tiempo Real
@@ -641,6 +670,8 @@ class BlueGuardWindow(QMainWindow):
             cl.addWidget(btn_mitigate)
             self.table_net.setCellWidget(row, 6, cell_widget)
 
+        self._autosize_table_once(self.table_net, "_net_cols_sized", fixed_last_col=110)
+
     def _populate_audit_cards(self):
         # Limpiar contenedor previo
         while self.audit_container_layout.count():
@@ -744,6 +775,8 @@ class BlueGuardWindow(QMainWindow):
             self.table_logs.setItem(row, 3, ti_item)
             self.table_logs.setItem(row, 4, ex_item)
 
+        self._autosize_table_once(self.table_logs, "_logs_cols_sized", fixed_last_col=None)
+
     def _populate_rules_table(self):
         rules = Mitigator.load_applied_rules()
         self.table_rules.setRowCount(len(rules))
@@ -774,6 +807,8 @@ class BlueGuardWindow(QMainWindow):
             wl.setContentsMargins(6, 2, 6, 2)
             wl.addWidget(btn_rev)
             self.table_rules.setCellWidget(row, 3, w)
+
+        self._autosize_table_once(self.table_rules, "_rules_cols_sized", fixed_last_col=130)
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Acciones de Mitigación con Consentimiento Informado (Aceptar / Denegar)
@@ -867,5 +902,39 @@ class BlueGuardWindow(QMainWindow):
                 padding: 8px;
                 border: none;
                 border-bottom: 1px solid #334155;
+            }
+            QScrollBar:horizontal {
+                background: #0B0F19;
+                height: 10px;
+                margin: 0px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:horizontal {
+                background: #334155;
+                min-width: 32px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background: #475569;
+            }
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+                width: 0px;
+            }
+            QScrollBar:vertical {
+                background: #0B0F19;
+                width: 10px;
+                margin: 0px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical {
+                background: #334155;
+                min-height: 32px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #475569;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
             }
         """)
